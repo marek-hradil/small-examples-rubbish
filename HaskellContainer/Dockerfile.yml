@@ -1,0 +1,6 @@
+FROM haskell:latest
+
+RUN cabal init -n && cabal update
+
+RUN mkdir -p /app
+WORKDIR  /app

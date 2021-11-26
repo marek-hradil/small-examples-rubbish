@@ -9,4 +9,4 @@ services:
     environment:
       POSTGRES_PASSWORD: password
       POSTGRES_USER: main
-      POSTGRES_DB: people
+      POSTGRES_DB: crashes

@@ -95,12 +95,12 @@ inline static void _jacobi(Matrix *matrix, float accuarcy, int iteration_limit)
             float absolute_element = row[matrix->cols - 1];
             float sum = 0;
 
-            for (int k = 0; k < matrix->cols; k++)
+            for (int k = 0; k < matrix->rows; k++)
             {
                 sum += row[k] * prev_results[k];
             }
 
-            float new_value = absolute_element - sum;
+            float new_value = (absolute_element - sum) / row[j];
             float accuarcy_error = fabsf(results[j] - new_value);
 
             is_accurate &= accuarcy_error < accuarcy;

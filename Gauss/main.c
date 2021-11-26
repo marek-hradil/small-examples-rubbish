@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <math.h>
 
 typedef struct
 {
@@ -9,265 +8,148 @@ typedef struct
     float **value;
 } Matrix;
 
-enum MatrixResult
+enum SolveabilityResult
 {
-    Concrete,
+    Regular,
     Infinite,
     None,
 };
 
-float calculate_multiplier(float base, float coeficient)
+Matrix *build_matrix(int rows, int cols)
 {
-    return coeficient / base;
-}
+    Matrix *m = malloc(sizeof(Matrix));
 
-Matrix *init_matrix(int rows, int cols)
-{
-    Matrix *matrix = malloc(sizeof(Matrix));
+    m->rows = rows;
+    m->cols = cols;
 
-    matrix->rows = rows;
-    matrix->cols = cols;
-    matrix->value = malloc(sizeof(float *) * matrix->rows);
-
-    for (int i = 0; i < matrix->rows; i++)
+    m->value = malloc(sizeof(float *) * rows);
+    for (int i = 0; i < rows; i++)
     {
-        matrix->value[i] = malloc(sizeof(float) * matrix->cols);
+        m->value[i] = calloc(cols, sizeof(float));
     }
 
-    return matrix;
+    return m;
 }
 
-Matrix *load_matrix_from_file(FILE *input_file)
+void delete_matrix(Matrix *m)
 {
+    for (int i = 0; i < m->rows; i++)
+    {
+        free(m->value[i]);
+    }
+
+    free(m->value);
+    free(m);
+}
+
+Matrix *load_matrix_from_file(char *path)
+{
+    FILE *f = fopen(path, "r");
     int rows = 0;
     int cols = 0;
-    if (fscanf(input_file, "%d %d", &rows, &cols) == 0)
-    {
-        fprintf(stderr, "Couldn't load matrix sizes. \n");
-        exit(EXIT_FAILURE);
-    }
 
-    Matrix *matrix = init_matrix(rows, cols);
+    fscanf(f, "%d %d", &rows, &cols);
 
-    for (int i = 0; i < matrix->rows; i++)
+    Matrix *m = build_matrix(rows, cols);
+
+    for (int i = 0; i < rows; i++)
     {
-        for (int j = 0; j < matrix->cols; j++)
+        for (int j = 0; j < cols; j++)
         {
-            if (fscanf(input_file, "%f", &matrix->value[i][j]) == 0)
-            {
-                fprintf(stderr, "Too few input numbers given. \n");
-                exit(EXIT_FAILURE);
-            }
+            fscanf(f, "%F ", &m->value[i][j]);
         }
     }
 
-    return matrix;
+    fclose(f);
+
+    return m;
 }
 
-void check_row_index(Matrix *matrix, int row_index)
+void print_matrix(Matrix *m)
 {
-    if (row_index < 0 || row_index >= matrix->rows)
+    printf("\n");
+    for (int i = 0; i < m->rows; i++)
     {
-        fprintf(stderr, "Invalid row index supplied. \n");
-        exit(EXIT_FAILURE);
-    }
-}
-
-void check_col_index(Matrix *matrix, int col_index)
-{
-    if (col_index < 0 || col_index >= matrix->cols)
-    {
-        fprintf(stderr, "Invalid col index supplied. \n");
-        exit(EXIT_FAILURE);
-    }
-}
-
-Matrix *swap_matrix_rows(Matrix *matrix, int row_index_1, int row_index_2)
-{
-    check_row_index(matrix, row_index_1);
-    check_row_index(matrix, row_index_2);
-
-    if (row_index_1 == row_index_2)
-    {
-        return matrix;
-    }
-
-    float *temp = matrix->value[row_index_1];
-    matrix->value[row_index_1] = matrix->value[row_index_2];
-    matrix->value[row_index_2] = temp;
-
-    return matrix;
-}
-
-int find_col_max_row_index(Matrix *matrix, int col_index)
-{
-    check_col_index(matrix, col_index);
-
-    int max_row_index = 0;
-    float max = matrix->value[0][col_index];
-
-    for (int i = 1; i < matrix->rows; i++)
-    {
-        if (fabsf(matrix->value[i][col_index]) > fabsf(max))
+        for (int j = 0; j < m->cols; j++)
         {
-            max_row_index = i;
+            printf("%2.2F\t", m->value[i][j]);
         }
+        printf("\n");
     }
-
-    return max_row_index;
+    printf("\n");
 }
 
-Matrix *eliminate_rows(Matrix *matrix, int starting_point_row, int starting_point_col)
+void swap_row(Matrix *m, int r1, int r2)
 {
-    check_row_index(matrix, starting_point_row);
-    check_col_index(matrix, starting_point_col);
+    float *tmp = m->value[r1];
+    m->value[r1] = m->value[r2];
+    m->value[r2] = tmp;
+}
 
-    int max_row_index = find_col_max_row_index(matrix, starting_point_col);
-    if (max_row_index != starting_point_row)
+void perform_forward_elimination(Matrix *m)
+{
+    for (int i = 0; i < m->rows - 1; i++)
     {
-        swap_matrix_rows(matrix, max_row_index, starting_point_row);
-    }
+        float diagonal_element_value = m->value[i][i];
 
-    for (int j = 1; j < (matrix->rows - starting_point_row); j++)
-    {
-        float multiplier = calculate_multiplier(matrix->value[starting_point_row][starting_point_col], matrix->value[starting_point_row + j][starting_point_col]);
-        for (int i = starting_point_col; i < matrix->cols; i++)
+        for (int j = i + 1; j < m->rows; j++)
         {
-            if (i == starting_point_col)
+            float coef = m->value[j][i] / m->value[i][i];
+
+            m->value[j][i] = 0;
+
+            for (int k = i + 1; k < m->cols; k++)
             {
-                matrix->value[starting_point_col + j][i] = 0;
-            }
-            else
-            {
-                matrix->value[starting_point_row + j][i] = matrix->value[starting_point_row + j][i] - (multiplier * matrix->value[starting_point_row][i]);
+                m->value[j][k] = m->value[j][k] - (m->value[i][k] * coef);
             }
         }
     }
-
-    return matrix;
 }
 
-Matrix *perform_forward_elimination(Matrix *matrix)
+enum SolveabilityResult perform_solveability_check(Matrix *m)
 {
-    if (matrix->rows + 1 != matrix->cols)
+    float last_exponent = m->value[m->rows - 1][m->cols - 2];
+    float last_absolute = m->value[m->rows - 1][m->cols - 1];
+    if (last_exponent != 0.0)
     {
-        fprintf(stderr, "Cannot perform forward elimination on this matrix.\n");
-        exit(EXIT_FAILURE);
+        return Regular;
     }
 
-    for (int i = 0; i < matrix->cols - 2; i++)
-    {
-        eliminate_rows(matrix, i, i);
-    }
-
-    return matrix;
-}
-
-enum MatrixResult test_for_result(Matrix *matrix)
-{
-    float exponent = matrix->value[matrix->rows - 1][matrix->cols - 2];
-    float concrete_value = matrix->value[matrix->rows - 1][matrix->cols - 1];
-
-    if (exponent == 0 && concrete_value == 0)
+    if (last_absolute == 0)
     {
         return Infinite;
     }
-    else if (exponent == 0 && concrete_value > 0)
-    {
-        return None;
-    }
-    else
-    {
-        return Concrete;
-    }
+
+    return None;
 }
 
-float *perform_backward_elimination(Matrix *matrix)
+void perform_backwards_propagation(Matrix *m)
 {
-    float *results = malloc(sizeof(float) * matrix->cols);
-    for (int i = matrix->rows - 1; i >= 0; i--)
+    for (int i = m->rows - 1; i >= 0; i--)
     {
-        float base = matrix->value[i][i];
-        float absolute_value = matrix->value[i][matrix->cols - 1];
         float sum = 0;
-
-        for (int j = i + 1; j < (matrix->cols - 1); j++)
+        for (int j = i + 1; j < m->cols - 1; j++)
         {
-            sum += results[j] * matrix->value[i][j];
+            sum += m->value[i][j] * m->value[j][m->cols - 1];
+            m->value[i][j] = 0;
         }
 
-        results[i] = (absolute_value - sum) / base;
-    }
+        float absolute = m->value[i][m->cols - 1];
+        float expo = m->value[i][i];
 
-    return results;
-}
-
-void print_results(float *results, int n)
-{
-    for (int i = 0; i < n; i++)
-    {
-        printf("Row %d: %f \n", i + 1, results[i]);
+        m->value[i][m->cols - 1] = (absolute - sum) / expo;
+        m->value[i][i] = 1;
     }
 }
 
-void print_matrix_to_file(Matrix *matrix, FILE *output_file)
+int main(int argc, char *argv[])
 {
-    fprintf(output_file, "%d %d\n", matrix->rows, matrix->cols);
-
-    for (int i = 0; i < matrix->rows; i++)
-    {
-        for (int j = 0; j < matrix->cols; j++)
-        {
-            fprintf(output_file, "%f ", matrix->value[i][j]);
-        }
-
-        fprintf(output_file, "\n");
-    }
-}
-
-FILE *open_matrix_file(const char *path, const char *mode)
-{
-    FILE *matrix_file = fopen(path, mode);
-    if (matrix_file == NULL)
-    {
-        fprintf(stderr, "Couldn't open matrix input file. \n");
-        exit(EXIT_FAILURE);
-    }
-
-    return matrix_file;
-}
-
-int main()
-{
-    FILE *first_matrix_input_file = open_matrix_file("./assets/matice1.txt", "r");
-    FILE *first_matrix_output_file = open_matrix_file("./assets/matice_output1.txt", "w");
-    Matrix *matrix = load_matrix_from_file(first_matrix_input_file);
-
-    perform_forward_elimination(matrix);
-
-    print_matrix_to_file(matrix, first_matrix_output_file);
-
-    switch (test_for_result(matrix))
-    {
-    case Concrete:
-    {
-        float *results = perform_backward_elimination(matrix);
-        print_results(results, matrix->cols - 1);
-        free(results);
-    }
-    break;
-
-    case Infinite:
-    {
-        printf("Inifinite number of solutions. \n");
-    }
-    break;
-
-    case None:
-    {
-        printf("No solution. \n");
-    }
-    }
-
+    Matrix *m = load_matrix_from_file("./assets/matice1.txt");
+    print_matrix(m);
+    perform_forward_elimination(m);
+    print_matrix(m);
+    perform_backwards_propagation(m);
+    print_matrix(m);
+    delete_matrix(m);
     return EXIT_SUCCESS;
 }
